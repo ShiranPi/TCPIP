@@ -1,0 +1,3 @@
+﻿  Client.cpp
+C:\Shiran\Projects\TCPIP\Client\Client.cpp(9,1): warning C4326: return type of 'main' should be 'int' instead of 'void'
+  Client.vcxproj -> C:\Shiran\Projects\TCPIP\Client\Debug\Client.exe

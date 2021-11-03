@@ -1,0 +1,2 @@
+C:\Shiran\Projects\TCPIP\Client\Debug\Client.exe
+C:\Shiran\Projects\TCPIP\Client\Debug\Client.pdb
