@@ -2,6 +2,7 @@
 #include <WS2tcpip.h>
 #include <string>
 #include <sstream>
+#include <fstream>
 #include <json/json.h>
 
 #pragma comment (lib, "ws2_32.lib")
@@ -10,11 +11,18 @@ using namespace std;
 
 void main()
 {
-	u_short port = 54000;
+	Json::Value settings;
+	std::ifstream settingsFile("settings.json", std::ifstream::binary);
+	settingsFile >> settings;
+	
+	u_short port = settings["port"].asInt();
+	bool running = true;
 
 	// Initialze winsock
 	WSADATA wsData;
 	WORD ver = MAKEWORD(2, 2);
+
+	cout << "Good morning everybody";
 
 	int wsOk = WSAStartup(ver, &wsData);
 	if (wsOk != 0)
@@ -24,8 +32,8 @@ void main()
 	}
 
 	// Create a socket
-	SOCKET listening = socket(AF_INET, SOCK_STREAM, 0);
-	if (listening == INVALID_SOCKET)
+	SOCKET listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
+	if (listeningSocket == INVALID_SOCKET)
 	{
 		cerr << "Can't create a socket! Quitting" << endl;
 		return;
@@ -37,19 +45,107 @@ void main()
 	hint.sin_port = htons(port);
 	hint.sin_addr.S_un.S_addr = INADDR_ANY;
 
-	bind(listening, (sockaddr*)&hint, sizeof(hint));
+	bind(listeningSocket, (sockaddr*)&hint, sizeof(hint));
 
 	// Tell Winsock the socket is for listening 
-	listen(listening, SOMAXCONN);
+	listen(listeningSocket, SOMAXCONN);
 
-	// Create the master file descriptor set and zero it
-	fd_set master;
-	FD_ZERO(&master);
+
+	/*SOCKET client = accept(listeningSocket, nullptr, nullptr);
+	char buf[4096];
+	while (running)
+	{
+		ZeroMemory(buf, 4096);
+		// Receive message
+		int bytesIn = recv(client, buf, 4096, 0);
+		send(client, buf, bytesIn + 1, 0);
+	}*/
+	
+
+
+
+
+
+
+
+
+
+	fd_set fileDiscriptorsManager;
+	char buf[4096];
+	FD_ZERO(&fileDiscriptorsManager);
+	FD_SET(listeningSocket, &fileDiscriptorsManager);
+	while (running)
+	{
+		fd_set copyOfFileDiscriptorsManager = fileDiscriptorsManager;
+		int socketCount = select(0, &copyOfFileDiscriptorsManager, nullptr, nullptr, nullptr);
+		for (int i = 0; i < socketCount; i++)
+		{
+			SOCKET sock = copyOfFileDiscriptorsManager.fd_array[i];
+
+			// Is it an inbound communication?
+			if (sock == listeningSocket)
+			{
+				// Accept a new connection
+				SOCKET client = accept(listeningSocket, nullptr, nullptr);
+
+				// Add the new connection to the list of connected clients
+				FD_SET(client, &fileDiscriptorsManager);
+
+				// Send a welcome message to the connected client
+				string welcomeMsg = "Welcome to the Awesome Chat Server!\r\n";
+				send(client, welcomeMsg.c_str(), welcomeMsg.size() + 1, 0);
+				/*ZeroMemory(buf, 4096);
+				// Receive message
+				int bytesIn = recv(client, buf, 4096, 0);
+				send(client, buf, bytesIn + 1, 0);*/
+			}
+			else // It's an inbound message
+			{
+				char buf[4096];
+				ZeroMemory(buf, 4096);
+
+				// Receive message
+				int bytesIn = recv(sock, buf, 4096, 0);
+				if (bytesIn <= 0)
+				{
+					// Drop the client
+					closesocket(sock);
+					FD_CLR(sock, &fileDiscriptorsManager);
+				}
+				else
+				{
+					send(sock, buf, bytesIn + 1, 0);
+					/*// Check to see if it's a command. \quit kills the server
+					if (buf[0] == '\\')
+					{
+						// Is the command quit? 
+						string cmd = string(buf, bytesIn);
+						if (cmd == "\\quit")
+						{
+							running = false;
+							break;
+						}
+
+						// Unknown command
+						continue;*/
+					}
+				}
+
+		}
+	}
+
+
+
+
+
+/*	// Create the master file descriptor set and zero it
+	fd_set fileDiscriptorsManager;
+	FD_ZERO(&fileDiscriptorsManager);
 
 	// Add our first socket that we're interested in interacting with; the listening socket!
 	// It's important that this socket is added for our server or else we won't 'hear' incoming
 	// connections 
-	FD_SET(listening, &master);
+	FD_SET(listeningSocket, &fileDiscriptorsManager);
 
 	// this will be changed by the \quit command (see below, bonus not in video!)
 	bool running = true;
@@ -68,25 +164,25 @@ void main()
 
 		// SO MAKE A COPY OF THE MASTER LIST TO PASS INTO select() !!!
 
-		fd_set copy = master;
+		fd_set copyOfFileDiscriptorsManager = fileDiscriptorsManager;
 
 		// See who's talking to us
-		int socketCount = select(0, &copy, nullptr, nullptr, nullptr);
+		int socketCount = select(0, &copyOfFileDiscriptorsManager, nullptr, nullptr, nullptr);
 		cerr << "after select function" << endl;
 		// Loop through all the current connections / potential connect
 		for (int i = 0; i < socketCount; i++)
 		{
 			// Makes things easy for us doing this assignment
-			SOCKET sock = copy.fd_array[i];
+			SOCKET sock = copyOfFileDiscriptorsManager.fd_array[i];
 
 			// Is it an inbound communication?
-			if (sock == listening)
+			if (sock == listeningSocket)
 			{
 				// Accept a new connection
-				SOCKET client = accept(listening, nullptr, nullptr);
+				SOCKET client = accept(listeningSocket, nullptr, nullptr);
 
 				// Add the new connection to the list of connected clients
-				FD_SET(client, &master);
+				FD_SET(client, &fileDiscriptorsManager);
 
 				// Send a welcome message to the connected client
 				string welcomeMsg = "Welcome to the Awesome Chat Server!\r\n";
@@ -103,7 +199,7 @@ void main()
 				{
 					// Drop the client
 					closesocket(sock);
-					FD_CLR(sock, &master);
+					FD_CLR(sock, &fileDiscriptorsManager);
 				}
 				else
 				{
@@ -121,25 +217,6 @@ void main()
 						// Unknown command
 						continue;
 					}
-
-					// Send message to other clients, and definiately NOT the listening socket
-
-					for (int i = 0; i < master.fd_count; i++)
-					{
-						SOCKET outSock = master.fd_array[i];
-						if (outSock != listening && outSock != sock)
-						{
-							ostringstream ss;
-							ss << "SOCKET #" << sock << ": " << buf << "\r\n";
-							string strOut = ss.str();
-
-							send(outSock, strOut.c_str(), strOut.size() + 1, 0);
-						}
-						else
-						{
-							send(outSock, "h", 2, 0);
-						}
-					}
 				}
 			}
 		}
@@ -147,24 +224,24 @@ void main()
 
 	// Remove the listening socket from the master file descriptor set and close it
 	// to prevent anyone else trying to connect.
-	FD_CLR(listening, &master);
-	closesocket(listening);
+	FD_CLR(listeningSocket, &fileDiscriptorsManager);
+	closesocket(listeningSocket);
 
 	// Message to let users know what's happening.
 	string msg = "Server is shutting down. Goodbye\r\n";
 
-	while (master.fd_count > 0)
+	while (fileDiscriptorsManager.fd_count > 0)
 	{
 		// Get the socket number
-		SOCKET sock = master.fd_array[0];
+		SOCKET sock = fileDiscriptorsManager.fd_array[0];
 
 		// Send the goodbye message
 		send(sock, msg.c_str(), msg.size() + 1, 0);
 
 		// Remove it from the master file list and close the socket
-		FD_CLR(sock, &master);
+		FD_CLR(sock, &fileDiscriptorsManager);
 		closesocket(sock);
-	}
+	}*/
 
 	// Cleanup winsock
 	WSACleanup();

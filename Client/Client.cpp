@@ -51,24 +51,24 @@ void main()
 
 	do
 	{
+		int bytesReceived = recv(sock, buf, 4096, 0);
+		if (bytesReceived > 0)
+		{
+			// Echo response to console
+			cout << "SERVER> " << string(buf, 0, bytesReceived) << endl;
+		}
 		// Prompt the user for some text
-		cout << "> ";
+		cout << "insert your request:\n ";
 		getline(cin, userInput);
 
 		if (userInput.size() > 0)		// Make sure the user has typed in something
 		{
 			// Send the text
 			int sendResult = send(sock, userInput.c_str(), userInput.size() + 1, 0);
-			if (sendResult != SOCKET_ERROR)
+			if (sendResult == SOCKET_ERROR)
 			{
-				// Wait for response
-				ZeroMemory(buf, 4096);
-				int bytesReceived = recv(sock, buf, 4096, 0);
-				if (bytesReceived > 0)
-				{
-					// Echo response to console
-					cout << "SERVER> " << string(buf, 0, bytesReceived) << endl;
-				}
+				cout << "error in send function on client side" << endl;
+				closesocket(sock);
 			}
 		}
 
